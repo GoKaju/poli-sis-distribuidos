@@ -1,61 +1,97 @@
-const net = require('net');
-const fs = require('fs');
-const dotenv = require('dotenv');
+const net = require("net");
+const fs = require("fs");
+const dotenv = require("dotenv");
 dotenv.config();
-const port =  process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
+const filename = "accounts.json";
 
 const server = net.createServer(onClientConnection);
 
-
-server.listen(port,function(){
-   console.log(`Server started on port ${port} `); 
+server.listen(port, function () {
+  console.log(`Server started on port ${port} `);
 });
 
-function onClientConnection(sock){
+function onClientConnection(sock) {
+  console.log(`${sock.remoteAddress}:${sock.remotePort} Connected`);
 
-    console.log(`${sock.remoteAddress}:${sock.remotePort} Connected`);
-
-    sock.on('data',function(data){
-        const dataParsed = JSON.parse(data);
-
-        if(dataParsed.event === 'createAccount'){
-           const accountCreated =  createAccount(dataParsed);
-           if (!accountCreated) {
-            sock.write(`Error in created account ${dataParsed.accountNumber}`);
-            return;
-           }
-            sock.write(`Account ${dataParsed.accountNumber} created with ${dataParsed.amount}`);
-
+  sock.on("data", function (data) {
+    const dataParsed = JSON.parse(data);
+    switch (dataParsed.event) {
+      case "createAccount":
+        const accountCreated = createAccount(dataParsed);
+        if (!accountCreated) {
+          sock.write("NO-OK");
+          return;
         }
-    });
+        sock.write("OK");
+        break;
+      case "getAccount":
+        const account = getAccount(dataParsed);
+        if (!account) {
+          sock.write("NO-OK");
+          return;
+        }
+        console.log(JSON.stringify(account));
+        sock.write(`El saldo de su cuenta es $ ${account.amount}`);
 
-    sock.on('close',function(){
-        console.log(`${sock.remoteAddress}:${sock.remotePort} Terminated the connection`);
-    });
-
-    sock.on('error',function(error){
-        console.error(`${sock.remoteAddress}:${sock.remotePort} Connection Error ${error}`);
-    });
-};
-
-
-function createAccount(data){
-    const accountNumber = data.accountNumber;
-    const amount = data.amount;
-    if(!accountNumber || !amount){
-        return false;
+      default:
+        break;
     }
-    return saveInFile({
-        accountNumber,
-        amount
-    });
+  });
+
+  sock.on("close", function () {
+    console.log(
+      `${sock.remoteAddress}:${sock.remotePort} Terminated the connection`
+    );
+  });
+
+  sock.on("error", function (error) {
+    console.error(
+      `${sock.remoteAddress}:${sock.remotePort} Connection Error ${error}`
+    );
+  });
 }
 
-function saveInFile(data){
-    try {
-        fs.writeFileSync('accounts.json',JSON.stringify(data));
-        return true;
-    } catch (error) {
-        return false;
-    }
+function createAccount(data) {
+  const accountNumber = data.accountNumber;
+  const amount = data.amount;
+  if (!accountNumber || !amount) {
+    return false;
+  }
+  const accounts = readFromFile();
+  accounts.push({
+    accountNumber,
+    amount,
+  });
+  return writeToFile(accounts);
+}
+
+function getAccount(data) {
+  const accountNumber = data.accountNumber;
+  if (!accountNumber) {
+    return false;
+  }
+  const accounts = readFromFile();
+  const account = accounts.find(
+    (account) => account.accountNumber === accountNumber
+  );
+  return account;
+}
+
+function writeToFile(data) {
+  try {
+    fs.writeFileSync(filename, JSON.stringify(data));
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+function readFromFile() {
+  try {
+    const data = fs.readFileSync(filename);
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
 }
